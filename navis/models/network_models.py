@@ -24,8 +24,8 @@ from .. import config
 # Set up logging
 logger = config.get_logger(__name__)
 
-__all__ = ['MBRTraversalModel', 'BayesianTraversalModel', 'TraversalModel', 
-           'linear_activation_p', 'linear_activation_with_neg', 'random_linear_activation_function']
+__all__ = ['MBRTraversalModel', 'BayesianTraversalModel', 'TraversalModel', 'linear_activation_p',
+           'random_linear_activation_function']
 
 
 class BaseNetworkModel:
@@ -191,9 +191,8 @@ class TraversalModel(BaseNetworkModel):
 
         assert weights in edges.columns, f'"{weights}" must be column in edge list'
 
-        # Remove seeds that don't exist in either source or target
-        self.seeds = np.array([s for s in seeds if s in np.unique(edges[[source, target]].values)])
-        # self.seeds = edges[edges[self.source].isin(seeds)][self.source].unique()
+        # Remove seeds that don't exist
+        self.seeds = edges[edges[self.source].isin(seeds)][self.source].unique()
 
         if len(self.seeds) == 0:
             raise ValueError('None of the seeds where among edge list sources.')
@@ -445,10 +444,7 @@ class BayesianTraversalModel(TraversalModel):
         valid = np.any(cmfs != 0, axis=1)
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
-        # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
-        # instead, set to -1 if no >=.5
-        mask = cmfs >= .5
-        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -1).astype(float)
+        layer_median = (cmfs >= .5).argmax(axis=1).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -467,152 +463,67 @@ class BayesianTraversalModel(TraversalModel):
         return self._summary
 
     def run(self, **kwargs) -> pd.DataFrame:
-        """Run model (single process, batched).
+        """Run model (single process)."""
 
-        The frontier of nodes whose CMF may change ("changed") is updated
-        synchronously in a single vectorised step per outer iteration via
-        ``np.multiply.reduceat`` over CSR-style inbound/outbound adjacency.
-        This replaces the previous Python-level loop, which scanned all
-        edges twice per visited node.
-
-        The previous implementation iterated a Python ``set`` of changed
-        nodes, so within-iteration update order was already
-        non-deterministic; this batched form is therefore consistent with
-        the algorithm's prior contract. On DAGs results are bit-identical
-        to the previous loop; on graphs with cycles results are
-        ``np.allclose`` to it (any residual difference is within the
-        ``np.allclose`` tolerance used by the convergence check and is
-        intrinsic to the sync-vs-async update schedule).
-        """
         # For some reason this is required for progress bars in Jupyter to show
         print(' ', end='', flush=True)
+        # For faster access, use the raw array
+        edges = self.edges[[self.source, self.target, self.weights]].values
+        id_type = self.edges[self.source].dtype
+        # Transform weights to traversal probabilities
+        edges[:, 2] = self.traversal_func(edges[:, 2])
 
-        # Raw edge arrays (source, target, weight) and weight-to-prob mapping.
-        src_raw = self.edges[self.source].values
-        tgt_raw = self.edges[self.target].values
-        w_raw = self.edges[self.weights].values.astype(np.float64, copy=True)
-        probs = self.traversal_func(w_raw).astype(np.float64, copy=False)
-
-        id_type = src_raw.dtype
-
-        # Dense node indices in [0, N).
-        ids, edges_flat = np.unique(np.stack([src_raw, tgt_raw], axis=1),
-                                    return_inverse=True)
+        # Change node IDs into indices in [0, len(nodes))
+        ids, edges_idx = np.unique(edges[:, :2], return_inverse=True)
         ids = ids.astype(id_type)
-        edges_flat = edges_flat.reshape(-1, 2)
-        src = edges_flat[:, 0].astype(np.int64)
-        tgt = edges_flat[:, 1].astype(np.int64)
+        edges_idx = edges_idx.reshape((edges.shape[0], 2))
+        edges_idx = np.concatenate(
+            (edges_idx, np.expand_dims(edges[:, 2], axis=1)),
+            axis=1)
 
-        N = ids.size
-        T = self.max_steps
-
-        # CSR by target: contiguous block of inbound edges per target node.
-        order_t = np.argsort(tgt, kind='stable')
-        src_by_tgt = src[order_t]
-        w_by_tgt = probs[order_t]
-        tgt_starts = np.zeros(N + 1, dtype=np.int64)
-        np.cumsum(np.bincount(tgt, minlength=N), out=tgt_starts[1:])
-
-        # CSR by source: contiguous block of outbound edges per source node.
-        order_s = np.argsort(src, kind='stable')
-        tgt_by_src = tgt[order_s]
-        src_starts = np.zeros(N + 1, dtype=np.int64)
-        np.cumsum(np.bincount(src, minlength=N), out=src_starts[1:])
-
-        cmfs = np.zeros((N, T), dtype=np.float64)
+        cmfs = np.zeros((len(ids), self.max_steps), dtype=np.float64)
         seed_idx = np.searchsorted(ids, self.seeds)
         cmfs[seed_idx, :] = 1.
-
-        # Initial frontier = direct downstream of any seed.
-        seed_mask = np.zeros(N, dtype=bool)
-        seed_mask[seed_idx] = True
-        changed = np.unique(tgt[seed_mask[src]])
-
-        iter_n = 0
-        frontier_history = []
+        changed = set(edges_idx[np.isin(edges_idx[:, 0], seed_idx), 1].astype(id_type))
 
         with config.tqdm(
-                total=None,
-                unit='upd',
+                total=0,
                 disable=config.pbar_hide,
                 leave=config.pbar_leave,
                 position=kwargs.get('position', 0)) as pbar:
-            while changed.size:
-                iter_n += 1
-                frontier_history.append(int(changed.size))
+            while len(changed):
+                next_changed = []
 
-                # Gather inbound edges for every node in `changed`.
-                starts = tgt_starts[changed]
-                ends = tgt_starts[changed + 1]
-                counts = ends - starts
-                total = int(counts.sum())
-                if total == 0:
-                    break
+                pbar.total += len(changed)
+                pbar.refresh()
 
-                edge_pos = _repeat_ranges(starts, ends)
-                pre_flat = src_by_tgt[edge_pos]
-                w_flat = w_by_tgt[edge_pos]
+                for idx in changed:
+                    cmf = cmfs[idx, :]
+                    inbound = edges_idx[edges_idx[:, 1] == idx, :]
+                    pre = inbound[:, 0].astype(np.int64)
 
-                # posteriors[e, t] = cmfs[pre_flat[e], t] * w_flat[e]
-                posteriors = cmfs[pre_flat, :] * w_flat[:, None]
+                    # Traversal probability for each inbound edge at each time.
+                    posteriors = cmfs[pre, :] * np.expand_dims(inbound[:, 2], axis=1)
+                    # At each time, compute the probability that at least one inbound edge
+                    # is traversed.
+                    new_pmf = 1 - np.prod(1 - posteriors, axis=0)
+                    new_cmf = cmf.copy()
+                    # Offset the time-cumulative probability by 1 to account for traversal iteration.
+                    # Use maximum of previous CMF as it is monotonic and to include fixed seed traversal.
+                    new_cmf[1:] = np.maximum(cmf[1:], 1 - np.cumprod(1 - new_pmf[:-1]))
+                    np.clip(new_cmf, 0., 1., out=new_cmf)
 
-                # Build per-edge multiplicative factors so groups can be
-                # reduced with np.multiply.reduceat (exact products, no log
-                # roundoff). Excitatory edges contribute (1 - p);
-                # inhibitory edges contribute (1 - |p|) — see the original
-                # MOD block of this method for the mixed-sign formula.
-                inhi = w_flat < 0
-                inhi_col = inhi[:, None]
-                factors_exc = np.where(inhi_col, 1.0, 1.0 - posteriors)
-                factors_inh = np.where(inhi_col, 1.0 - np.abs(posteriors), 1.0)
+                    if np.allclose(cmf, new_cmf):
+                        continue
 
-                # Group starts in the (already-sorted) flat edge array.
-                group_starts = np.empty(changed.size, dtype=np.int64)
-                group_starts[0] = 0
-                np.cumsum(counts[:-1], out=group_starts[1:])
+                    cmfs[idx, :] = new_cmf
 
-                prod_exc = np.multiply.reduceat(factors_exc, group_starts, axis=0)
-                prod_inh = np.multiply.reduceat(factors_inh, group_starts, axis=0)
+                    # Notify downstream nodes that they have changed next iteration.
+                    post_idx = edges_idx[edges_idx[:, 0] == idx, 1].astype(id_type)
+                    next_changed.extend(list(post_idx))
 
-                # new_pmf = (1 - prod(1 - p_exc)) * prod(1 - |p_inh|)
-                new_pmf = (1.0 - prod_exc) * prod_inh
-
-                # new_cmf[:, 1:] = max(old[:, 1:], 1 - cumprod(1 - new_pmf[:, :-1]))
-                old_cmf = cmfs[changed, :]
-                if T > 1:
-                    cumprod_term = np.cumprod(1.0 - new_pmf[:, :-1], axis=1)
-                    new_cmf = old_cmf.copy()
-                    new_cmf[:, 1:] = np.maximum(old_cmf[:, 1:], 1.0 - cumprod_term)
-                else:
-                    new_cmf = old_cmf.copy()
-                np.clip(new_cmf, 0., 1., out=new_cmf)
-
-                actually_changed = ~np.all(np.isclose(old_cmf, new_cmf), axis=1)
-                if not actually_changed.any():
-                    pbar.update(0)
-                    break
-                cmfs[changed[actually_changed], :] = new_cmf[actually_changed]
-
-                # Next frontier = outbound of nodes whose CMF actually changed.
-                updated = changed[actually_changed]
-                o_starts = src_starts[updated]
-                o_ends = src_starts[updated + 1]
-                o_pos = _repeat_ranges(o_starts, o_ends)
-
-                next_frontier_size = (
-                    int(np.unique(tgt_by_src[o_pos]).size) if o_pos.size else 0
-                )
-
-                pbar.update(int(actually_changed.sum()))
-                pbar.set_postfix(
-                    _bayes_progress_postfix(
-                        iter_n, frontier_history, next_frontier_size, pbar),
-                    refresh=False,
-                )
-
-                if o_pos.size == 0:
-                    break
-                changed = np.unique(tgt_by_src[o_pos])
+                pbar.update(len(changed))
+                changed = set(next_changed)
 
         self.iterations = 1
         self.results = pd.DataFrame({'node': ids, 'cmf': list(cmfs)})
@@ -687,10 +598,7 @@ class MBRTraversalModel(TraversalModel):
         valid = np.any(cmfs != 0, axis=1)
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
-        # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
-        # instead, set to -1 if no >=.5
-        mask = cmfs >= .5
-        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -1).astype(float)
+        layer_median = (cmfs >= .5).argmax(axis=1).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -750,18 +658,14 @@ class MBRTraversalModel(TraversalModel):
 
                     # Traversal probability for each inbound edge at each time.
                     posteriors = cmfs[pre, :] * np.expand_dims(inbound[:, 2], axis=1)
-                    
                     # At each time, compute the probability that at least one inbound edge
                     # is traversed.
                     # new_pmf = 1 - np.prod(1 - posteriors, axis=0)
-                    # sum up all incoming probabilities
                     new_pmf = np.sum(posteriors, axis=0)
-
                     new_cmf = cmf.copy()
                     # Offset the time-cumulative probability by 1 to account for traversal iteration.
                     # Use maximum of previous CMF as it is monotonic and to include fixed seed traversal.
                     # new_cmf[1:] = np.maximum(cmf[1:], 1 - np.cumprod(1 - new_pmf[:-1]))
-                    # update the cmf, now only 0 or 1
                     new_cmf[1:] = np.maximum(cmf[1:], new_pmf[:-1] > self.threshold)
                     np.clip(new_cmf, 0., 1., out=new_cmf)
 
@@ -784,99 +688,6 @@ class MBRTraversalModel(TraversalModel):
     def run_parallel(self, *args, **kwargs) -> None:
         warnings.warn(f"{self.__class__.__name__} should not be run in parallel. Falling back to run.")
         self.run(**kwargs)
-
-
-def _repeat_ranges(starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
-    """Flatten per-row ranges ``[starts[i], ends[i])`` into one int64 array.
-
-    Vectorised equivalent of
-    ``np.concatenate([np.arange(s, e) for s, e in zip(starts, ends)])``.
-    Used by ``BayesianTraversalModel.run`` to gather edges into the
-    current frontier without a Python loop.
-    """
-    counts = ends - starts
-    total = int(counts.sum())
-    if total == 0:
-        return np.empty(0, dtype=np.int64)
-    cumc = np.cumsum(counts)
-    group_offsets = starts - np.concatenate(([0], cumc[:-1]))
-    return np.arange(total, dtype=np.int64) + np.repeat(group_offsets, counts)
-
-
-def _bayes_progress_postfix(iter_n, frontier_history, next_frontier_size, pbar):
-    """Build a tqdm postfix dict for ``BayesianTraversalModel.run``.
-
-    Reports the current outer iteration, the size of the current and next
-    frontier, and a best-effort ETA derived from the recent geometric
-    decay of the frontier (only valid once the frontier has been
-    monotonically decreasing for a few iterations).
-    """
-    info = {
-        'iter': iter_n,
-        'frontier': frontier_history[-1],
-        'next': next_frontier_size,
-    }
-    if next_frontier_size == 0:
-        info['eta'] = '~done'
-        return info
-    recent = frontier_history[-3:] + [next_frontier_size]
-    if len(recent) >= 3 and all(
-        recent[i + 1] <= recent[i] for i in range(len(recent) - 1)
-    ):
-        ratios = [
-            recent[i + 1] / recent[i]
-            for i in range(len(recent) - 1)
-            if recent[i] > 0
-        ]
-        ratios = [r for r in ratios if 0 < r < 1]
-        if ratios:
-            decay = float(np.mean(ratios))
-            remaining_iters = int(
-                np.ceil(np.log(1.0 / max(next_frontier_size, 1)) / np.log(decay))
-            )
-            remaining_iters = max(remaining_iters, 1)
-            elapsed = pbar.format_dict.get('elapsed', 0.0)
-            if iter_n > 0 and elapsed > 0:
-                sec_per_iter = elapsed / iter_n
-                info['eta'] = f'~{remaining_iters * sec_per_iter:.1f}s'
-            else:
-                info['eta'] = f'~{remaining_iters} it'
-    else:
-        info['eta'] = 'expanding'
-    return info
-
-
-def linear_activation_with_neg(
-    w: np.ndarray,
-    neg_w: float = -1,
-    pos_w: float = .3,
-) -> np.ndarray:
-    """ Convert to linear activation probability.
-    Separately scale positive and negative weights.
-
-    Parameters
-    ----------
-    w :     np.ndarray
-            (N, 1) array containing the edge weights.
-    min_w : float
-            Value of ``w`` at which neg wt has a probability of activation of 1
-    max_w : float
-            Value of ``w`` at which pos wt has a probability of activation of 1
-
-    Returns
-    -------
-    np.ndarray
-            Probability of activation for each edge.
-
-    """
-    # w = w / np.sum(np.abs(w)) # assuming already normalized
-    # separate positive and negative weights
-    neg_idx = w < 0
-    pos_idx = w >= 0
-    w[neg_idx] = np.clip(-(w[neg_idx] - 0) / (neg_w - 0), -1., 0.)
-    w[pos_idx] = np.clip((w[pos_idx] - 0) / (pos_w - 0), 0., 1.)
-
-    return w
 
 
 def linear_activation_p(
