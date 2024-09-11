@@ -403,7 +403,7 @@ NBLAST and related functions:
 
 ### Distances
 
-Functions to calculate Euclidian and geodesic ("along-the-arbor") distances.
+Functions to calculate Euclidean and geodesic ("along-the-arbor") distances.
 
 | Function | Description |
 |----------|-------------|
@@ -516,6 +516,7 @@ Functions to convert between neurons graph representation (networkx or iGraph).
 | [`navis.rewire_skeleton()`][navis.rewire_skeleton] | {{ autosummary("navis.rewire_skeleton") }} |
 | [`navis.insert_nodes()`][navis.insert_nodes] | {{ autosummary("navis.insert_nodes") }} |
 | [`navis.remove_nodes()`][navis.remove_nodes] | {{ autosummary("navis.remove_nodes") }} |
+| [`navis.graph.simplify_graph()`][navis.graph.simplify_graph] | {{ autosummary("navis.graph.simplify_graph") }} |
 
 ### Connectivity metrics
 

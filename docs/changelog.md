@@ -11,9 +11,17 @@ For a full list of changes please see the [commits history](https://github.com/n
 {{ navis }}' Github repository.
 
 ## dev
-Date: ongoing
+_Date: ongoing_
 
-This version contains a major internal rework of both [`navis.plot2d`][] and [`navis.plot3d`][] to make them more consistent and easier to use.
+To install the current `dev` version of {{ navis }}:
+
+```shell
+pip uninstall navis -y
+pip install git+https://github.com/navis-org/navis@master
+```
+
+This version contains a major internal rework of both [`navis.plot2d`][] and [`navis.plot3d`][] to make them
+more consistent and easier to use.
 
 ##### Breaking
 - Plotting: the `synapse_layout` parameter was renamed to `cn_layout` (matching e.g. other parameters such as `cn_colors`)
@@ -26,6 +34,7 @@ This version contains a major internal rework of both [`navis.plot2d`][] and [`n
 ##### Additions
 - Added [Octarine](https://github.com/schlegelp/octarine) as the default backend for plotting from terminal
 - New function: [`navis.graph.skeleton_adjacency_matrix`][] computes the node adjacency for skeletons
+- New function: [`navis.graph.simplify_graph`][] simplifies skeleton graphs to only root, branch and leaf nodes while preserving branch length (i.e. weights)
 - New [`NeuronList`][navis.NeuronList] method: [`get_neuron_attributes`][navis.NeuronList.get_neuron_attributes] is analagous to `dict.get`
 - [`NeuronLists`][navis.NeuronList] now implemented the `|` (`__or__`) operator which can be used to get the union of two [`NeuronLists`][navis.NeuronList]
 - [`navis.Volume`][] now have an (optional) `.units` property similar to neurons
@@ -54,8 +63,8 @@ This version contains a major internal rework of both [`navis.plot2d`][] and [`n
 - [`navis.graph.node_label_sorting`][] now correctly prioritizes total branch length
 - [`navis.TreeNeuron.simple][] now correctly drops soma nodes if they aren't root, branch or leaf points themselves
 
-## Version 1.7.0
-Date: 25/07/24
+## Version `1.7.0` { data-toc-label="1.7.0" }
+_Date: 25/07/24_
 
 ##### Breaking
 - Plotting: dropped the `cluster` parameter in favor of an improved `color_by` logic (see below)
@@ -79,8 +88,8 @@ Date: 25/07/24
 
 **Full Changelog**: [v1.6.0...v1.7.0](https://github.com/navis-org/navis/compare/v1.6.0...v1.7.0)
 
-## Version 1.6.0
-Date: 07/04/24
+## Version `1.6.0` { data-toc-label="1.6.0" }
+_Date: 07/04/24_
 
 ##### Breaking
 - Dropped support for Python 3.8, per NEP 29
@@ -115,8 +124,8 @@ Date: 07/04/24
 
 **Full Changelog**: [v1.5.0...v1.6.0](https://github.com/navis-org/navis/compare/v1.5.0...v1.6.0)
 
-## Version 1.5.0
-Date: 27/07/23
+## Version `1.5.0` { data-toc-label="1.5.0" }
+_Date: 27/07/23_
 
 ##### Breaking
 - Dropped support for Python 3.7
@@ -138,8 +147,8 @@ Date: 27/07/23
 
 **Full Changelog**: [v1.4.0...v1.5.0](https://github.com/navis-org/navis/compare/v1.4.0...v1.5.0)
 
-## Version 1.4.0
-Date: 21/12/22
+## Version `1.4.0` { data-toc-label="1.4.0" }
+_Date: 21/12/22_
 
 ##### Breaking
 - `navis.flow_centrality` was renamed to `navis.synapse_flow_centrality` and a new non-synaptic `navis.flow_centrality` function was added. This also impacts the `method` parameter in `navis.split_axon_dendrite`!
@@ -161,16 +170,16 @@ Date: 21/12/22
 
 **Full Changelog**: [v1.3.1...v1.4.0](https://github.com/navis-org/navis/compare/v1.3.1...v1.4.0)
 
-## Version 1.3.1
-Date: 10/06/22
+## Version `1.3.1` { data-toc-label="1.3.1" }
+_Date: 10/06/22_
 
 ##### Fixes
 - Various bugs fixed
 
 **Full Changelog**: [v1.3.0...v1.3.1](https://github.com/navis-org/navis/compare/v1.3.0...v1.3.1)
 
-## Version 1.3.0
-Date: 10/05/22
+## Version `1.3.0` { data-toc-label="1.3.0" }
+_Date: 10/05/22_
 
 ##### Breaking
 - As of this version `pip install navis` won't install a vispy backend
@@ -191,16 +200,16 @@ Date: 10/05/22
 
 **Full Changelog**: [v1.2.1...v1.3.0](https://github.com/navis-org/navis/compare/v1.2.1...v1.3.0)
 
-## Version 1.2.1
-Date: 25/02/22
+## Version `1.2.1` { data-toc-label="1.2.1" }
+_Date: 25/02/22_
 
 ##### Fixes
 - Hot fix for `navis.split_axon_dendrite`
 
 **Full Changelog**: [v1.2.0...v1.2.1](https://github.com/navis-org/navis/compare/v1.2.0...v1.2.1)
 
-## Version 1.2.0
-Date: 24/02/22
+## Version `1.2.0` { data-toc-label="1.2.0" }
+_Date: 24/02/22_
 
 ##### Additions
 - New function: `navis.betweeness_centrality`
@@ -221,8 +230,8 @@ Date: 24/02/22
 
 **Full Changelog**: [v1.1.0...v1.2.0](https://github.com/navis-org/navis/compare/v1.1.0...v1.2.0)
 
-## Version 1.1.0
-Date: 18/11/21
+## Version `1.1.0` { data-toc-label="1.1.0" }
+_Date: 18/11/21_
 
 ##### Additions
 - New function: `navis.sholl_analysis`
@@ -233,8 +242,8 @@ Date: 18/11/21
 
 **Full Changelog**: [v1.0.0...v1.1.0](https://github.com/navis-org/navis/compare/v1.0.0...v1.1.0)
 
-## Version 1.0.0
-Date: 11/11/21
+## Version `1.0.0` { data-toc-label="1.0.0" }
+_Date: 11/11/21_
 
 ##### Breaking
 - `navis.MeshNeuron`: `__getattr__` does not search `trimesh` representation anymore
@@ -320,8 +329,8 @@ Date: 11/11/21
 
 **Full Changelog**: [v0.6.0...v1.0.0](https://github.com/navis-org/navis/compare/v0.6.0...v1.0.0)
 
-## Version 0.6.0
-Date: 12/05/21
+## Version `0.6.0` { data-toc-label="0.6.0" }
+_Date: 12/05/21_
 
 ##### Additions
 - new functions: `navis.prune_at_depth`, `navis.read_rda`, `navis.cell_body_fiber`
@@ -351,8 +360,8 @@ Date: 12/05/21
 
 **Full Changelog**: [v0.5.3...v0.6.0](https://github.com/navis-org/navis/compare/v0.5.3...v0.6.0)
 
-## Version 0.5.3
-Date: 10/04/21
+## Version `0.5.3` { data-toc-label="0.5.3" }
+_Date: 10/04/21_
 
 ##### Additions
 - new functions: `navis.nblast_smart`, `navis.synblast`, `navis.symmetrize_brain`
@@ -372,8 +381,8 @@ Date: 10/04/21
 
 **Full Changelog**: [v0.5.2...v0.5.3](https://github.com/navis-org/navis/compare/v0.5.2...v0.5.3)
 
-## Version 0.5.2
-Date: 02/02/21
+## Version `0.5.2` { data-toc-label="0.5.2" }
+_Date: 02/02/21_
 
 ##### Additions
 - new functions: `navis.xform`, `navis.write_precomputed`
@@ -385,16 +394,16 @@ Date: 02/02/21
 
 **Full Changelog**: [v0.5.1...v0.5.2](https://github.com/navis-org/navis/compare/v0.5.1...v0.5.2)
 
-## Version 0.5.1
-Date: 10/01/21
+## Version `0.5.1` { data-toc-label="0.5.1" }
+_Date: 10/01/21_
 
 ##### Fixes
 - Various under-the-hood improvements and bugfixes
 
 **Full Changelog**: [v0.5.0...v0.5.1](https://github.com/navis-org/navis/compare/v0.5.0...v0.5.1)
 
-## Version 0.5.0
-Date: 05/01/21
+## Version `0.5.0` { data-toc-label="0.5.0" }
+_Date: 05/01/21_
 
 ##### Additions
 - new functions for transforming spatial data (locations, neurons, etc) between brain spaces:
@@ -408,32 +417,32 @@ Date: 05/01/21
 
 **Full Changelog**: [v0.4.3...v0.5.0](https://github.com/navis-org/navis/compare/v0.4.3...v0.5.0)
 
-## Version 0.4.3
-Date: 22/12/20
+## Version `0.4.3` { data-toc-label="0.4.3" }
+_Date: 22/12/20_
 
 ##### Fixes
 - Small bugfixes
 
 **Full Changelog**: [v0.4.2...v0.4.3](https://github.com/navis-org/navis/compare/v0.4.2...v0.4.3)
 
-## Version 0.4.2
-Date: 22/12/20
+## Version `0.4.2` { data-toc-label="0.4.2" }
+_Date: 22/12/20_
 
 ##### Fixes
 - Small bugfixes
 
 **Full Changelog**: [v0.4.1...v0.4.2](https://github.com/navis-org/navis/compare/v0.4.1...v0.4.2)
 
-## Version 0.4.1
-Date: 06/12/20
+## Version `0.4.1` { data-toc-label="0.4.1" }
+_Date: 06/12/20_
 
 ##### Fixes
 - Critical bugfix in NBLAST
 
 **Full Changelog**: [v0.4.0...v0.4.1](https://github.com/navis-org/navis/compare/v0.4.0...v0.4.1)
 
-## Version 0.4.0
-Date: 06/12/20
+## Version `0.4.0` { data-toc-label="0.4.0" }
+_Date: 06/12/20_
 
 ##### Additions
 - native implementation of NBLAST: `navis.nblast` and `navis.nblast_allbyall`!
@@ -442,8 +451,8 @@ Date: 06/12/20
 
 **Full Changelog**: [v0.3.4...v0.4.0](https://github.com/navis-org/navis/compare/v0.3.4...v0.4.0)
 
-## Version 0.3.4
-Date: 24/11/20
+## Version `0.3.4` { data-toc-label="0.3.4" }
+_Date: 24/11/20_
 
 ##### Improvements
 - improved `navis.Dotprops`:
@@ -452,8 +461,8 @@ Date: 24/11/20
 
 **Full Changelog**: [v0.3.3...v0.3.4](https://github.com/navis-org/navis/compare/v0.3.3...v0.3.4)
 
-## Version 0.3.3
-Date: 23/11/20
+## Version `0.3.3` { data-toc-label="0.3.3" }
+_Date: 23/11/20_
 
 ##### Additions
 - new module: `models` for modelling networks and neurons
@@ -484,8 +493,8 @@ neuron by custom properties (e.g. by Strahler index or compartment)
 
 **Full Changelog**: [v0.3.2...v0.3.3](https://github.com/navis-org/navis/compare/v0.3.2...v0.3.3)
 
-## Version 0.3.2
-Date: 18/10/20
+## Version `0.3.2` { data-toc-label="0.3.2" }
+_Date: 18/10/20_
 
 ##### Improvements
 - `navis.plot2d` and `navis.plot3d` now accept `trimesh.Trimesh` directly
@@ -496,8 +505,8 @@ Date: 18/10/20
 
 **Full Changelog**: [v0.3.1...v0.3.2](https://github.com/navis-org/navis/compare/v0.3.1...v0.3.2)
 
-## Version 0.3.1
-Date: 07/10/20
+## Version `0.3.1` { data-toc-label="0.3.1" }
+_Date: 07/10/20_
 
 ##### Additions
 - new function `navis.rewire_skeleton`
@@ -517,8 +526,8 @@ Date: 07/10/20
 
 **Full Changelog**: [v0.3.0...v0.3.1](https://github.com/navis-org/navis/compare/v0.3.0...v0.3.1)
 
-## Version 0.3.0
-Date: 06/10/20
+## Version `0.3.0` { data-toc-label="0.3.0" }
+_Date: 06/10/20_
 
 ##### Additions
 - Started module to manipulate mesh data (see e.g. `navis.simplify_mesh`)
@@ -529,8 +538,8 @@ Date: 06/10/20
 
 **Full Changelog**: [v0.2.3...v0.3.0](https://github.com/navis-org/navis/compare/v0.2.3...v0.3.0)
 
-## Version 0.2.3
-Date: 06/09/20
+## Version `0.2.3` { data-toc-label="0.2.3" }
+_Date: 06/09/20_
 
 ##### Additions
 - New Neuron property `.label` that if present will be used for plot legends
@@ -539,8 +548,8 @@ Date: 06/09/20
 ##### Improvements
 - Blender interface: improved scatter plot generation
 
-## Version 0.2.2
-Date: 15/08/20
+## Version `0.2.2` { data-toc-label="0.2.2" }
+_Date: 15/08/20_
 
 ##### Additions
 - New `plot3d` parameter: with plotly backend, use `fig` to add data to existing plotly figure
@@ -554,8 +563,8 @@ Date: 15/08/20
 - Fix issues with newer rpy2 versions
 - Various improvements and bug fixes
 
-## Version 0.2.1
-Date: 20/04/20
+## Version `0.2.1` { data-toc-label="0.2.1" }
+_Date: 20/04/20_
 
 ##### Additions
 - New `plot3d` parameter: with plotly backend, use `radius=True` plots TreeNeurons with radius
@@ -564,8 +573,8 @@ Date: 20/04/20
 ##### Improvements
 - Various improvements to e.g. `nx2neuron`
 
-## Version 0.2.0
-Date: 29/06/20
+## Version `0.2.0` { data-toc-label="0.2.0" }
+_Date: 29/06/20_
 
 ##### Breaking
 - `navis.nx2neuron` now returns a `navis.TreeNeuron` instead of a `DataFrame`
@@ -582,28 +591,28 @@ Date: 29/06/20
 ##### Fixes
 - Fix bugs in `navis.Volume` pickling
 
-## Version 0.1.16
-Date: 26/05/20
+## Version `0.1.16` { data-toc-label="0.1.16" }
+_Date: 26/05/20_
 
 ##### Fixes
 - Many small bugfixes
 
-## Version 0.1.15
-Date: 15/05/20
+## Version `0.1.15` { data-toc-label="0.1.15" }
+_Date: 15/05/20_
 
 ##### Improvements
 - improvements to R and Blender interface
 - improved loading from SWCs (up to 2x faster)
 - TreeNeurons: allow rerooting by setting the `.root` attribute
 
-## Version 0.1.14
-Date: 05/05/20
+## Version `0.1.14` { data-toc-label="0.1.14" }
+_Date: 05/05/20_
 
 ##### Fixes
 - Emergency fixes for critical bugs
 
-## Version 0.1.13
-Date: 05/05/20
+## Version `0.1.13` { data-toc-label="0.1.13" }
+_Date: 05/05/20_
 
 ##### Additions
 - new function: `navis.vary_color`
@@ -611,14 +620,14 @@ Date: 05/05/20
 ##### Improvements
 - improvements to Blender interface and various other functions
 
-## Version 0.1.12
-Date: 02/04/20
+## Version `0.1.12` { data-toc-label="0.1.12" }
+_Date: 02/04/20_
 
 ##### Imnprovements
 - `navis.Volume` is now sublcass of `trimesh.Trimesh`
 
-## Version 0.1.11
-Date: 28/02/20
+## Version `0.1.11` { data-toc-label="0.1.11" }
+_Date: 28/02/20_
 
 ##### Improvements
 - improved `navis.stitch_neurons`: much faster now if you have iGraph
@@ -627,33 +636,33 @@ Date: 28/02/20
 - fixed errors when using multiprocessing (e.g. in `NeuronList.apply`)
 - fixed bugs in `navis.downsample_neuron`
 
-## Version 0.1.10
-Date: 24/02/20
+## Version `0.1.10` { data-toc-label="0.1.10" }
+_Date: 24/02/20_
 
 ##### Fixes
 - Fixed bugs in Blender interface introduced in 0.1.9
 
-## Version 0.1.9
-Date: 24/02/20
+## Version `0.1.9` { data-toc-label="0.1.9" }
+_Date: 24/02/20_
 
 ##### Fixes
 - Removed hard-coded swapping and translation of axes in the Blender interface
 - Fixed bugs in `navis.stitch_neurons`
 
-## Version 0.1.8
-Date: 21/02/20
+## Version `0.1.8` { data-toc-label="0.1.8" }
+_Date: 21/02/20_
 
 ##### Fixes
 - Again lots of fixed bugs
 
-## Version 0.1.0
-Date: 23/05/19
+## Version `0.1.0` { data-toc-label="0.1.0" }
+_Date: 23/05/19_
 
 ##### Fixes
 - Many small bugfixes
 
-## Version 0.0.1
-Date: 29/01/19
+## Version `0.0.1` { data-toc-label="0.0.1" }
+_Date: 29/01/19_
 
 ##### Fixes
 - First commit, lots to fix.

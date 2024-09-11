@@ -67,7 +67,7 @@ navis.plot3d(
 
 # And one 2d plot for the tutorial thumbnail
 import matplotlib.pyplot as plt
-fig, ax = navis.plot2d(m[0], method='2d', view=("x", "-y"))
+fig, ax = navis.plot2d(m[1], method='2d', view=("x", "-y"))
 ax.set_axis_off()
 ax.grid(False)
 plt.tight_layout()
@@ -78,3 +78,8 @@ plt.tight_layout()
 
 sk = vol.skeleton.get([4335355146, 2913913713, 2137190164, 2268989790], as_navis=True)
 sk
+
+# %%
+# !!! experiment "Try it out!"
+#     If you are working a lot with NeuroGlancer and need to e.g. generated or parse URLs, you might want to check out the
+#     [`nglscenes`](https://github.com/schlegelp/nglscenes) package.

@@ -80,9 +80,9 @@ gitpython
 #extra: docs
 
 mkdocs
-mkdocs-material
+mkdocs-material[imaging]
 mkdocs-gen-files
-mkdocstrings
+mkdocstrings[python]
 mkdocs-glightbox
 mkdocs-gallery
 markdown-exec
