@@ -24,8 +24,8 @@ from .. import config
 # Set up logging
 logger = config.get_logger(__name__)
 
-__all__ = ['MBRTraversalModel', 'BayesianTraversalModel', 'TraversalModel', 'linear_activation_p',
-           'random_linear_activation_function']
+__all__ = ['MBRTraversalModel', 'BayesianTraversalModel', 'TraversalModel', 
+           'linear_activation_p', 'linear_activation_with_neg', 'random_linear_activation_function']
 
 
 class BaseNetworkModel:
@@ -444,7 +444,10 @@ class BayesianTraversalModel(TraversalModel):
         valid = np.any(cmfs != 0, axis=1)
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
-        layer_median = (cmfs >= .5).argmax(axis=1).astype(float)
+        # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
+        # instead, set to -2 if no >=.5
+        mask = cmfs >= .5
+        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -2).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -504,9 +507,15 @@ class BayesianTraversalModel(TraversalModel):
 
                     # Traversal probability for each inbound edge at each time.
                     posteriors = cmfs[pre, :] * np.expand_dims(inbound[:, 2], axis=1)
-                    # At each time, compute the probability that at least one inbound edge
-                    # is traversed.
-                    new_pmf = 1 - np.prod(1 - posteriors, axis=0)
+
+                    # # At each time, compute the probability that at least one inbound edge is traversed.
+                    # new_pmf = 1 - np.prod(1 - posteriors, axis=0)
+                    # MOD 
+                    # At each time, compute the probability that at least one excitatory inbound edge is traversed,
+                    # and no inhibitory edge is traversed.
+                    edge_inhi = inbound[:, 2] < 0
+                    new_pmf = (1 - np.prod(1 - posteriors[~edge_inhi, :], axis=0)) * np.prod(1 - np.abs(posteriors[edge_inhi, :]), axis=0)
+                    
                     new_cmf = cmf.copy()
                     # Offset the time-cumulative probability by 1 to account for traversal iteration.
                     # Use maximum of previous CMF as it is monotonic and to include fixed seed traversal.
@@ -598,7 +607,10 @@ class MBRTraversalModel(TraversalModel):
         valid = np.any(cmfs != 0, axis=1)
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
-        layer_median = (cmfs >= .5).argmax(axis=1).astype(float)
+        # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
+        # instead, set to -2 if no >=.5
+        mask = cmfs >= .5
+        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -2).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -658,14 +670,18 @@ class MBRTraversalModel(TraversalModel):
 
                     # Traversal probability for each inbound edge at each time.
                     posteriors = cmfs[pre, :] * np.expand_dims(inbound[:, 2], axis=1)
+                    
                     # At each time, compute the probability that at least one inbound edge
                     # is traversed.
                     # new_pmf = 1 - np.prod(1 - posteriors, axis=0)
+                    # sum up all incoming probabilities
                     new_pmf = np.sum(posteriors, axis=0)
+
                     new_cmf = cmf.copy()
                     # Offset the time-cumulative probability by 1 to account for traversal iteration.
                     # Use maximum of previous CMF as it is monotonic and to include fixed seed traversal.
                     # new_cmf[1:] = np.maximum(cmf[1:], 1 - np.cumprod(1 - new_pmf[:-1]))
+                    # update the cmf, now only 0 or 1
                     new_cmf[1:] = np.maximum(cmf[1:], new_pmf[:-1] > self.threshold)
                     np.clip(new_cmf, 0., 1., out=new_cmf)
 
@@ -688,6 +704,39 @@ class MBRTraversalModel(TraversalModel):
     def run_parallel(self, *args, **kwargs) -> None:
         warnings.warn(f"{self.__class__.__name__} should not be run in parallel. Falling back to run.")
         self.run(**kwargs)
+
+
+def linear_activation_with_neg(
+    w: np.ndarray,
+    neg_w: float = -1,
+    pos_w: float = .3,
+) -> np.ndarray:
+    """ Convert to linear activation probability.
+    Separately scale positive and negative weights.
+
+    Parameters
+    ----------
+    w :     np.ndarray
+            (N, 1) array containing the edge weights.
+    min_w : float
+            Value of ``w`` at which neg wt has a probability of activation of 1
+    max_w : float
+            Value of ``w`` at which pos wt has a probability of activation of 1
+
+    Returns
+    -------
+    np.ndarray
+            Probability of activation for each edge.
+
+    """
+    # w = w / np.sum(np.abs(w)) # assuming already normalized
+    # separate positive and negative weights
+    neg_idx = w < 0
+    pos_idx = w >= 0
+    w[neg_idx] = np.clip(-(w[neg_idx] - 0) / (neg_w - 0), -1., 0.)
+    w[pos_idx] = np.clip((w[pos_idx] - 0) / (pos_w - 0), 0., 1.)
+
+    return w
 
 
 def linear_activation_p(
