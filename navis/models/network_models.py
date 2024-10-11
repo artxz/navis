@@ -20,13 +20,12 @@ import warnings
 from typing import Iterable, Union, Optional, Callable
 
 from .. import config
-from ..compute.dispatch import init_pool_worker
 
 # Set up logging
 logger = config.get_logger(__name__)
 
-__all__ = ['MBRTraversalModel', 'BayesianTraversalModel', 'TraversalModel', 'linear_activation_p',
-           'random_linear_activation_function']
+__all__ = ['MBRTraversalModel', 'BayesianTraversalModel', 'TraversalModel', 
+           'linear_activation_p', 'linear_activation_with_neg', 'random_linear_activation_function']
 
 
 class BaseNetworkModel:
@@ -65,8 +64,7 @@ class BaseNetworkModel:
         """Run model using parallel processes."""
         # Note that we initialize each process by making "edges" a global argument
         with mp.Pool(processes=n_cores,
-                     initializer=init_pool_worker,
-                     initargs=(self.initializer,)) as pool:
+                     initializer=self.initializer) as pool:
 
             # Each process will take about the same amount of time
             # So we want each process to take a single batch of iterations/n_cores runs
@@ -376,23 +374,6 @@ class BayesianTraversalModel(TraversalModel):
                         which will linearly scale probability of traversal
                         from 0 to 100% between edges weights 0 to 0.3.
 
-    Notes
-    -----
-    This model is a fast, deterministic approximation of the Monte-Carlo
-    [`navis.models.network_models.TraversalModel`][]. For each node it
-    propagates the full delivery distribution of every inbound edge (the
-    parent's traversal-time distribution convolved with the edge's per-step
-    firing probability) and is therefore *exact* for tree-like graphs and for
-    single points of reconvergence (e.g. diamonds). It does, however, still
-    assume that a node's parents are traversed *independently*. This holds
-    whenever the parents' traversal times are independent (as in a diamond),
-    but is only an approximation when two or more parents share correlated
-    upstream ancestry. In that case the model may slightly mistime the node's
-    traversal; use `TraversalModel` (Monte-Carlo) as ground truth if exactness
-    matters there. Note also that, as with `TraversalModel`, results near the
-    `max_steps` horizon are affected by truncation - increase `max_steps` if a
-    node's traversal-time distribution has not effectively converged to 1.
-
     Examples
     --------
     >>> from navis.models import BayesianTraversalModel
@@ -463,7 +444,10 @@ class BayesianTraversalModel(TraversalModel):
         valid = np.any(cmfs != 0, axis=1)
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
-        layer_median = (cmfs >= .5).argmax(axis=1).astype(float)
+        # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
+        # instead, set to -2 if no >=.5
+        mask = cmfs >= .5
+        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -2).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -520,40 +504,22 @@ class BayesianTraversalModel(TraversalModel):
                     cmf = cmfs[idx, :]
                     inbound = edges_idx[edges_idx[:, 1] == idx, :]
                     pre = inbound[:, 0].astype(np.int64)
-                    p_edge = inbound[:, 2]
 
-                    # Probability that each parent *first* activates at a given step.
-                    pmf = np.diff(cmfs[pre, :], axis=1, prepend=0.)
+                    # Traversal probability for each inbound edge at each time.
+                    posteriors = cmfs[pre, :] * np.expand_dims(inbound[:, 2], axis=1)
 
-                    # For each inbound edge, compute the probability that it has
-                    # delivered traversal to this node by a given step. An edge
-                    # whose parent became active at step ``k`` fires with
-                    # probability ``p`` at each subsequent step, so it has
-                    # delivered by step ``t`` with probability ``1 - (1-p)^(t-k)``.
-                    # The delivery CMF is therefore the parent's activation-time
-                    # PMF convolved with this geometric edge-firing distribution.
-                    # This correctly models the fact that all of a single edge's
-                    # per-step firings are driven by the *same* (monotone)
-                    # parent-activation event, rather than treating them as
-                    # independent across time (the latter over-counts traversal
-                    # and made this node appear to be reached too early - see #194).
-                    # The convolution is evaluated via the recurrence
-                    # ``c[t] = (1-p) * c[t-1] + pmf[t]``, with
-                    # ``deliver = parent_cmf - c``.
-                    q = 1 - p_edge
-                    c = np.empty_like(pmf)
-                    c[:, 0] = pmf[:, 0]
-                    for t in range(1, pmf.shape[1]):
-                        c[:, t] = q * c[:, t - 1] + pmf[:, t]
-                    deliver = cmfs[pre, :] - c
-
-                    # Combine inbound edges assuming independence *across parents*.
-                    # This is exact for tree-like graphs and single points of
-                    # reconvergence (e.g. diamonds); see the Notes in the class
-                    # docstring for the residual approximation. Take the maximum
-                    # with the previous CMF as it is monotonic and to preserve
-                    # fixed seed traversal.
-                    new_cmf = np.maximum(cmf, 1 - np.prod(1 - deliver, axis=0))
+                    # # At each time, compute the probability that at least one inbound edge is traversed.
+                    # new_pmf = 1 - np.prod(1 - posteriors, axis=0)
+                    # MOD 
+                    # At each time, compute the probability that at least one excitatory inbound edge is traversed,
+                    # and no inhibitory edge is traversed.
+                    edge_inhi = inbound[:, 2] < 0
+                    new_pmf = (1 - np.prod(1 - posteriors[~edge_inhi, :], axis=0)) * np.prod(1 - np.abs(posteriors[edge_inhi, :]), axis=0)
+                    
+                    new_cmf = cmf.copy()
+                    # Offset the time-cumulative probability by 1 to account for traversal iteration.
+                    # Use maximum of previous CMF as it is monotonic and to include fixed seed traversal.
+                    new_cmf[1:] = np.maximum(cmf[1:], 1 - np.cumprod(1 - new_pmf[:-1]))
                     np.clip(new_cmf, 0., 1., out=new_cmf)
 
                     if np.allclose(cmf, new_cmf):
@@ -641,7 +607,10 @@ class MBRTraversalModel(TraversalModel):
         valid = np.any(cmfs != 0, axis=1)
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
-        layer_median = (cmfs >= .5).argmax(axis=1).astype(float)
+        # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
+        # instead, set to -2 if no >=.5
+        mask = cmfs >= .5
+        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -2).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -701,14 +670,18 @@ class MBRTraversalModel(TraversalModel):
 
                     # Traversal probability for each inbound edge at each time.
                     posteriors = cmfs[pre, :] * np.expand_dims(inbound[:, 2], axis=1)
+                    
                     # At each time, compute the probability that at least one inbound edge
                     # is traversed.
                     # new_pmf = 1 - np.prod(1 - posteriors, axis=0)
+                    # sum up all incoming probabilities
                     new_pmf = np.sum(posteriors, axis=0)
+
                     new_cmf = cmf.copy()
                     # Offset the time-cumulative probability by 1 to account for traversal iteration.
                     # Use maximum of previous CMF as it is monotonic and to include fixed seed traversal.
                     # new_cmf[1:] = np.maximum(cmf[1:], 1 - np.cumprod(1 - new_pmf[:-1]))
+                    # update the cmf, now only 0 or 1
                     new_cmf[1:] = np.maximum(cmf[1:], new_pmf[:-1] > self.threshold)
                     np.clip(new_cmf, 0., 1., out=new_cmf)
 
@@ -731,6 +704,39 @@ class MBRTraversalModel(TraversalModel):
     def run_parallel(self, *args, **kwargs) -> None:
         warnings.warn(f"{self.__class__.__name__} should not be run in parallel. Falling back to run.")
         self.run(**kwargs)
+
+
+def linear_activation_with_neg(
+    w: np.ndarray,
+    neg_w: float = -1,
+    pos_w: float = .3,
+) -> np.ndarray:
+    """ Convert to linear activation probability.
+    Separately scale positive and negative weights.
+
+    Parameters
+    ----------
+    w :     np.ndarray
+            (N, 1) array containing the edge weights.
+    min_w : float
+            Value of ``w`` at which neg wt has a probability of activation of 1
+    max_w : float
+            Value of ``w`` at which pos wt has a probability of activation of 1
+
+    Returns
+    -------
+    np.ndarray
+            Probability of activation for each edge.
+
+    """
+    # w = w / np.sum(np.abs(w)) # assuming already normalized
+    # separate positive and negative weights
+    neg_idx = w < 0
+    pos_idx = w >= 0
+    w[neg_idx] = np.clip(-(w[neg_idx] - 0) / (neg_w - 0), -1., 0.)
+    w[pos_idx] = np.clip((w[pos_idx] - 0) / (pos_w - 0), 0., 1.)
+
+    return w
 
 
 def linear_activation_p(
