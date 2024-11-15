@@ -24,9 +24,9 @@ and your environment (e.g. Jupyter/VS code or terminal). Here's a quick summary:
 
 In theory there is feature parity across backends but due to built-in limitations there are minor differences.
 
-If you installed NAVis via `pip install navis[all]` all of the above backends should be available to you.
-If you ran a minimal install (`pip install navis`) you may need to install the backends separately
-- NAVis will complain if you try to use a backend that is not installed!
+If you installed {{ navis }} via `pip install navis[all]` all of the above backends should be available to you.
+If you ran a minimal install via `pip install navis` you may need to install the backends separately
+- {{ navis }} will complain if you try to use a backend that is not installed!
 
 !!! note
 
@@ -75,7 +75,9 @@ plt.tight_layout()
 
 # %%
 # Plot again
-fig, ax = nl.plot2d(method="3d_complex", view=("x", "-z"), non_view_axes3d="show")
+fig, ax = nl.plot2d(
+    method="3d_complex", view=("x", "-z"), non_view_axes3d="show", radius=True
+)
 
 # Change view to see the neurons from a different angle
 ax.elev = -20
@@ -86,7 +88,7 @@ plt.tight_layout()
 
 # %%
 # !!! note
-#     Did you note that we set `non_view_axes3d='show'` in above example? By default, { navis } hides the axis that is parallel to
+#     Did you note that we set `non_view_axes3d='show'` in above example? By default, {{ navis }} hides the axis that is parallel to
 #     the viewing direction is hidden to not clutter the image. Because we were going to change the perspective,
 #     we set it to `show`. FYI: if the plot is rendered in a separate window (e.g. if you run Python from
 #     terminal), you can change the perspective by dragging the image.
@@ -256,8 +258,9 @@ navis.plot3d(
     nl,
     backend="plotly",
     connectors=False,
+    radius=True,  # use node radii for skeletons
     legend_orientation="h",  # horizontal legend (more space for plot)
-    )
+)
 
 # %%
 # Instead of inline plotting, you can also export your plotly figure as 3D html file that can be opened in any browser:
@@ -290,7 +293,7 @@ navis.plot3d(
 #
 # Above we demo'ed making a little GIF using matplotlib. While that's certainly fun, it's not
 # very high production value. For high quality videos and renderings I recommend you check out
-# the tutorial on navis' [Blender interface](../3_interfaces/plot_01_interfaces.blender). Here's a little taster:
+# the tutorial on navis' [Blender interface](../3_interfaces/tutorial_interfaces_02_blender). Here's a little taster:
 #
 #  <iframe width="560" height="315" src="https://www.youtube.com/embed/wl3sFG7WQJc" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
 #

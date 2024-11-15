@@ -20,48 +20,106 @@ pip uninstall navis -y
 pip install git+https://github.com/navis-org/navis@master
 ```
 
+## Version `1.9.1` { data-toc-label="1.9.1" }
+_Date: 24/10/24_
+
+##### Improvements
+- MICrONS & H01 interfaces:
+    - `fetch_neurons` now accepts a `materialization` parameter that determines which materialization version is used for synapse and nucleus queries; defaults to "auto" which means `navis` will try to find a materialization version matching the queried root IDs
+    - `fetch_neurons` will now also assign soma positions for H01 neurons (see the `.soma_pos` neuron property)
+- `CloudVolume.mesh.get_navis` (see [`navis.patch_cloudvolume`][]) now accepts a `process` (default is `False`) parameter that determines whether the NeuroGlancer mesh is processed (deduplication of vertices, etc.); contribute by Forrest Collman
+
+##### Fixes
+- fixed a bug in [`navis.subset_neuron`][] that caused branch points to not be re-calculated
+
+**Full Changelog**: [v1.9.0...v1.9.1](https://github.com/navis-org/navis/compare/v1.9.0...v1.9.1)
+
+## Version `1.9.0` { data-toc-label="1.9.0" }
+_Date: 17/10/24_
+
+This version brings a shiny new interface to the [H01 human cortex](https://h01-release.storage.googleapis.com/landing.html) dataset
+and various other quality of life improvements.
+
+##### Breaking
+- The default for `radius` ([`navis.plot2d`][] and [`navis.plot3d`][]) was changed to `False` (from `"auto"`); this is to make sure that the defaults allow visualizing large numbers of skeletons, i.e. prioritizing performance over beauty
+
+##### Additions
+- New interface to the [H01](https://h01-release.storage.googleapis.com/landing.html) dataset (by Jinhan Choi and Jakob Troidl; see the new tutorial for details)
+
+##### Improvements
+- I/O:
+    - [`read_nrrd`][navis.read_nrrd], [`read_tiff`][navis.read_tiff] and [`read_mesh`][navis.read_mesh] now use the same backend as e.g. [`read_swc`][navis.read_swc] which enables some niceties such as reading directly from URLs and archives, parallel processing, etc
+    - all `read_*` functions now have an `error` parameter that can be used to skip errors
+- Image data:
+    - new function: [`navis.thin_voxels`][] can be used to thin images and `VoxelNeurons` to single-pixel width (see also below)
+    - new `thin` parameter for [`read_nrrd`][navis.read_nrrd], [`read_tiff`][navis.read_tiff]
+- [`TreeNeurons`][navis.TreeNeuron]:
+    - skeletons can now be initialized from a `(vertices, edges)` tuple - see also [`navis.edges2neuron`][]
+    - new property: `TreeNeuron.vertices` gives read-only to node (vertex) coordinates
+- [`VoxelNeurons`][navis.VoxelNeuron]:
+    - new properties: `VoxelNeuron.nnz` and `VoxelNeuron.density`
+- [`navis.drop_fluff`][] and [`navis.neuron2nx`][] now also works with [`Dotprops`][navis.Dotprops]
+
+##### Experimental
+- setting `navis.config.add_units=True` (default is `False` for the time being) will add units to certain neuron properties such as `.cable_length` to make them human-readable
+
+**Full Changelog**: [v1.8.0...v1.9.0](https://github.com/navis-org/navis/compare/v1.8.0...v1.9.0)
+
+## Version `1.8.0` { data-toc-label="1.8.0" }
+_Date: 22/09/24_
+
 This version contains a major internal rework of both [`navis.plot2d`][] and [`navis.plot3d`][] to make them
 more consistent and easier to use.
 
 ##### Breaking
 - Plotting: the `synapse_layout` parameter was renamed to `cn_layout` (matching e.g. other parameters such as `cn_colors`)
-- Negative views in [`navis.plot2d`][] (e.g. `view=("x", "-z")`) are now implemented by inverting axis rather than changing the underlying data
+- Negative views in [`navis.plot2d`][] (e.g. `view=("x", "-z")`) will now invert axes rather than changing the underlying data
 - Minimum version of `matplotlib` is now `3.9` (was `3.6`)
 - The `plotly` backend is not part of a minimal install anymore (still installed using `navis[all]`)
 - The Vispy backend is now deprecated and will be removed in a future release
 - Removed `navis.screenshot` - please use the Octarine/Vispy viewer's `.screenshot()` method instead
+- [`navis.tortuosity`][] now calculates tortuosity as-is (i.e. without resampling) by default
 
 ##### Additions
 - Added [Octarine](https://github.com/schlegelp/octarine) as the default backend for plotting from terminal
+- New Function: [`navis.ivscc_features`][] computes some basic IVSCC features
 - New function: [`navis.graph.skeleton_adjacency_matrix`][] computes the node adjacency for skeletons
 - New function: [`navis.graph.simplify_graph`][] simplifies skeleton graphs to only root, branch and leaf nodes while preserving branch length (i.e. weights)
 - New [`NeuronList`][navis.NeuronList] method: [`get_neuron_attributes`][navis.NeuronList.get_neuron_attributes] is analagous to `dict.get`
-- [`NeuronLists`][navis.NeuronList] now implemented the `|` (`__or__`) operator which can be used to get the union of two [`NeuronLists`][navis.NeuronList]
+- [`NeuronLists`][navis.NeuronList] now implement the `|` (`__or__`) operator which can be used to get the union of two [`NeuronLists`][navis.NeuronList]
 - [`navis.Volume`][] now have an (optional) `.units` property similar to neurons
+- `Tree/MeshNeurons` and `Dotprops` now support addition/subtraction (similar to the already existing multiplication and division) to allow offsetting neurons
 
 ##### Improvements
 - Plotting:
-  - [`navis.plot3d`][]:
-    - `legendgroup` parameter (plotly backend) now also sets the legend group's title
-    - new parameters for the plotly backend:
-      - `legend` (default `True`): determines whether legends is shown
-      - `legend_orientation` (default `v`): determines whether legend is aranged vertically (`v`) or horizontally (`h`)
-      - `linestyle` (default `-`): determines line style for skeletons
-    - default for `radius` is now `"auto"`
-  - [`navis.plot2d`][]:
-    - the `view` parameter now also works with `methods` `3d` and `3d_complex`
-    - the `color_by` and `shade_by` parameters now also work when plotting skeletons with `radius=True`
-    - new defaults: `radius="auto"`, `alpha=1`, `figsize=None` (use matplotlib defaults)
-    - new parameters for methods `3d` and `3d_complex`: `mesh_shade=False` and `non_view_axes3d`
-    - the `scalebar` parameter can now be a dictionary used to style (color, width, etc) the scalebar
-  - the `connectors` parameter can now be used to show specific connector types (e.g. `connectors="pre"`)
+    - [`navis.plot3d`][]:
+      - `legendgroup` parameter (plotly backend) now also sets the legend group's title
+      - new parameters for the plotly backend:
+          - `legend` (default `True`): determines whether legends is shown
+          - `legend_orientation` (default `v`): determines whether legend is aranged vertically (`v`) or horizontally (`h`)
+          - `linestyle` (default `-`): determines line style for skeletons
+      - default for `radius` is now `"auto"`
+    - [`navis.plot2d`][]:
+      - the `view` parameter now also works with `methods` `3d` and `3d_complex`
+      - the `color_by` and `shade_by` parameters now also work when plotting skeletons with `radius=True`
+      - new defaults: `radius="auto"`, `alpha=1`, `figsize=None` (use matplotlib defaults)
+      - new parameters for methods `3d` and `3d_complex`: `mesh_shade=False` and `non_view_axes3d`
+      - the `scalebar` and `soma` parameters can now also be dictionaries to style (color, width, etc) the scalebar/soma
+    - the `connectors` parameter can now be used to show specific connector types (e.g. `connectors="pre"`)
+- I/O:
+    - `read_*` functions are now able to read from FTP servers (`ftp://...`)
+    - the `limit` parameter used in many `read_*` functions can now also be a regex pattern or a `slice`
+- New parameter in [`navis.resample_skeleton`][]: use `map_column` to include arbitrary columns in the resampling
+- [`navis.prune_twigs`][] and [`navis.morpho.cable_length`][] now accept a `mask` parameter
 - General improvements to docs and tutorials
 
 ##### Fixes
 - Memory usage of `Neuron/Lists` is now correctly re-calculated when the neuron is modified
 - Various fixes and improvements for the MICrONS interface (`navis.interfaces.microns`)
 - [`navis.graph.node_label_sorting`][] now correctly prioritizes total branch length
-- [`navis.TreeNeuron.simple][] now correctly drops soma nodes if they aren't root, branch or leaf points themselves
+- [`navis.TreeNeuron.simple`][] now correctly drops soma nodes if they aren't root, branch or leaf points themselves
+
+**Full Changelog**: [v1.7.0...v1.8.0](https://github.com/navis-org/navis/compare/v1.7.0...v1.8.0)
 
 ## Version `1.7.0` { data-toc-label="1.7.0" }
 _Date: 25/07/24_
@@ -113,8 +171,8 @@ _Date: 07/04/24_
 ##### Fixes
 - Fixed interface to InsectBrainDB
 - `navis.read_precomputed`:
-  - now correctly parses the `info` file depending on the source
-  - reading large files (i.e. meshes) directly from a URL should not break anymore
+    - now correctly parses the `info` file depending on the source
+    - reading large files (i.e. meshes) directly from a URL should not break anymore
 - Fixed writing vertex properties in `navis.write_precomputed`
 - Fixed a bug in `navis.resample_skeleton`
 - Fixed an occasional issue when plotting skeletons with radii
@@ -268,13 +326,13 @@ _Date: 11/11/21_
 ##### Additions & Improvements
 - `navis.NeuronList.apply()` now allows omitting failures
 - `navis.VoxelNeuron`:
-  - new class representing neurons as voxels
-  - new (experimental) class representing neurons as voxels
-  - `navis.read_nrrd` now returns `VoxelNeuron` instead of `Dotprops` by default
-  - currently works with only a selection of functions
+    - new class representing neurons as voxels
+    - new (experimental) class representing neurons as voxels
+    - `navis.read_nrrd` now returns `VoxelNeuron` instead of `Dotprops` by default
+    - currently works with only a selection of functions
 - `navis.TreeNeuron`:
-  - can now be initialized directly with `skeletor.Skeleton`
-  - new method: `navis.TreeNeuron.snap`
+    - can now be initialized directly with `skeletor.Skeleton`
+    - new method: `navis.TreeNeuron.snap`
 - `navis.MeshNeuron`:
     - `navis.in_volume`, `navis.subset_neuron` and `navis.break_fragments` now work on `MeshNeurons`
     - new properties: `.skeleton`, `.graph` and `.igraph`
@@ -407,9 +465,9 @@ _Date: 05/01/21_
 
 ##### Additions
 - new functions for transforming spatial data (locations, neurons, etc) between brain spaces:
-  - `navis.xform_brain` transforms data from one space to another
-  - `navis.mirror_brain` mirrors data about given axis
-  - see the new tutorials for explanations
+    - `navis.xform_brain` transforms data from one space to another
+    - `navis.mirror_brain` mirrors data about given axis
+    - see the new tutorials for explanations
 - low-level interfaces to work with affine, H5-, CMTK- and thin plate spline transforms
 
 ##### Improvements
@@ -481,8 +539,8 @@ neuron by custom properties (e.g. by Strahler index or compartment)
 
 ##### Improvements
 - neurons are now more memory efficient:
-  - pandas "categoricals" are used for connector and node "type" and "label" columns
-  - add a `.memory_usage` method analogous to that of `pandas.DataFrames`
+    - pandas "categoricals" are used for connector and node "type" and "label" columns
+    - add a `.memory_usage` method analogous to that of `pandas.DataFrames`
 - `navis.NeuronList` can now be pickled!
 - made `navis.Viewer` faster
 - `navis.prune_twigs` can now (optionally) prune by `exactly` the desired length
@@ -601,9 +659,9 @@ _Date: 26/05/20_
 _Date: 15/05/20_
 
 ##### Improvements
-- improvements to R and Blender interface
-- improved loading from SWCs (up to 2x faster)
-- TreeNeurons: allow rerooting by setting the `.root` attribute
+- Improvements to R and Blender interface
+- Improved loading from SWCs (up to 2x faster)
+- `TreeNeurons`: allow rerooting by setting the `.root` attribute
 
 ## Version `0.1.14` { data-toc-label="0.1.14" }
 _Date: 05/05/20_
