@@ -191,8 +191,9 @@ class TraversalModel(BaseNetworkModel):
 
         assert weights in edges.columns, f'"{weights}" must be column in edge list'
 
-        # Remove seeds that don't exist
-        self.seeds = edges[edges[self.source].isin(seeds)][self.source].unique()
+        # Remove seeds that don't exist in either source or target
+        self.seeds = np.array([s for s in seeds if s in np.unique(edges[[source, target]].values)])
+        # self.seeds = edges[edges[self.source].isin(seeds)][self.source].unique()
 
         if len(self.seeds) == 0:
             raise ValueError('None of the seeds where among edge list sources.')
@@ -445,9 +446,9 @@ class BayesianTraversalModel(TraversalModel):
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
         # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
-        # instead, set to -2 if no >=.5
+        # instead, set to -1 if no >=.5
         mask = cmfs >= .5
-        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -2).astype(float)
+        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -1).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
@@ -608,9 +609,9 @@ class MBRTraversalModel(TraversalModel):
         layer_max = (cmfs == 1.).argmax(axis=1)
         layer_max[~np.any(cmfs == 1., axis=1)] = cmfs.shape[1]
         # layer_median = (cmfs >= .5).argmax(axis=1).astype(float) # problem when no >=.5, returns 0
-        # instead, set to -2 if no >=.5
+        # instead, set to -1 if no >=.5
         mask = cmfs >= .5
-        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -2).astype(float)
+        layer_median = np.where(mask.any(axis=1), mask.argmax(axis=1), -1).astype(float)
         pmfs = np.diff(cmfs, axis=1, prepend=0.)
         layer_pmfs = pmfs * np.arange(pmfs.shape[1])
         layer_mean = np.sum(layer_pmfs, axis=1)
