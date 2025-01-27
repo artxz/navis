@@ -58,6 +58,8 @@ def _generate_segments(
 ) -> Union[list, Tuple[list, list]]:
     """Generate segments maximizing segment lengths.
 
+    Isolated nodes will be included as segments of length 0.
+
     Parameters
     ----------
     x :         TreeNeuron | NeuronList
@@ -108,6 +110,7 @@ def _generate_segments(
             x.nodes.node_id.values, x.nodes.parent_id.values, weights=weight
         )
 
+    # Find leaf nodes and sort by distance to root
     d = dist_to_root(x, igraph_indices=False, weight=weight)
     endNodeIDs = x.nodes[x.nodes.type == "end"].node_id.values
     endNodeIDs = sorted(endNodeIDs, key=lambda x: d.get(x, 0), reverse=True)
@@ -147,8 +150,17 @@ def _generate_segments(
     lengths = [d[s[0]] - d[s[-1]] for s in sequences]
     sequences = [x for _, x in sorted(zip(lengths, sequences), reverse=True)]
 
+    # Turn into list of arrays
+    sequences = [np.array(s) for s in sequences]
+
+    # Isolated nodes would not be included in the sequences(because they are treated
+    # as roots, not leafs. Let's add them manually here.
+    for node in nx.isolates(x.graph):
+        sequences.append(np.array([node]))
+        lengths.append(0)
+
     if return_lengths:
-        return sequences, sorted(lengths, reverse=True)
+        return sequences, np.array(sorted(lengths, reverse=True))
     else:
         return sequences
 
@@ -700,10 +712,10 @@ def distal_to(
         # Return boolean
         return df
 
+
 def skeleton_adjacency_matrix(
-    x: "core.NeuronObject",
-    sort: bool = True
-    ) -> pd.DataFrame:
+    x: "core.NeuronObject", sort: bool = True
+) -> pd.DataFrame:
     """Generate adjacency matrix for a skeleton.
 
     Parameters
@@ -734,7 +746,7 @@ def skeleton_adjacency_matrix(
             x = x[0]
         else:
             raise ValueError("Cannot process more than a single neuron.")
-    elif not isinstance(x, (core.TreeNeuron, )):
+    elif not isinstance(x, (core.TreeNeuron,)):
         raise ValueError(f'Unable to process data of type "{type(x)}"')
 
     # Generate the empty adjacency matrix
@@ -776,11 +788,11 @@ def geodesic_matrix(
                 If provided, will compute distances only FROM this subset to
                 all other nodes/vertices.
     directed :  bool, optional
-                If True, pairs without a child->parent path will be returned
-                with `distance = "inf"`. Only relevant for `TreeNeurons`.
+                For TreeNeurons only: if True, pairs without a child->parent
+                path will be returned with `distance = "inf"`.
     weight :    'weight' | None, optional
-                If `weight` distances are given as physical length.
-                If `None` distances is number of nodes.
+                If "weight" distances are given as physical length.
+                If `None` distance is the number of nodes.
     limit :     int | float, optional
                 Use to limit distance calculations. Nodes that are not within
                 `limit` will have distance `np.inf`. If neuron has its
@@ -789,7 +801,8 @@ def geodesic_matrix(
     Returns
     -------
     pd.DataFrame
-                Geodesic distance matrix. Distances in nanometres.
+                Geodesic distance matrix. If the neuron is fragmented or
+                `directed=True`, unreachable node pairs will have distance `np.inf`.
 
     See Also
     --------
@@ -819,11 +832,11 @@ def geodesic_matrix(
 
     """
     if isinstance(x, core.NeuronList):
-        if len(x) == 1:
-            x = x[0]
-        else:
-            raise ValueError("Cannot process more than a single neuron.")
-    elif not isinstance(x, (core.TreeNeuron, core.MeshNeuron)):
+        if len(x) != 1:
+            raise ValueError("Input must be a single neuron.")
+        x = x[0]
+
+    if not isinstance(x, (core.TreeNeuron, core.MeshNeuron)):
         raise ValueError(f'Unable to process data of type "{type(x)}"')
 
     limit = x.map_units(limit, on_error="raise")
@@ -860,7 +873,7 @@ def geodesic_matrix(
             sources=from_,
         )
 
-        # Fastcore returns -1 for non-connected nodes
+        # Fastcore returns -1 for unreachable node pairs
         dmat[dmat < 0] = np.inf
 
         if limit is not None and limit is not np.inf:
@@ -901,7 +914,7 @@ def geodesic_matrix(
         indices = None
         ix = nodeList
 
-    # For some reason csgrpah.dijkstra expects indices/indptr as int32
+    # For some reason csgraph.dijkstra expects indices/indptr as int32
     # igraph seems to do that by default but networkx uses int64 for indices
     m.indptr = m.indptr.astype("int32", copy=False)
     m.indices = m.indices.astype("int32", copy=False)
@@ -1342,13 +1355,16 @@ def longest_neurite(
         x = x.copy()
 
     if not from_root:
-        # Find the two most distal points
-        leafs = x.leafs.node_id.values
+        # Find the two most distal points (N.B. roots can also be "ends")
+        leafs = x.nodes.loc[x.nodes.type.isin(("root", "end")), 'node_id'].values
         dists = geodesic_matrix(x, from_=leafs)[leafs]
+
+        # If the neuron is fragmented, we will have infinite distances
+        dists[dists == np.inf] = -1
 
         # This might be multiple values
         mx = np.where(dists == np.max(dists.values))
-        start = dists.columns[mx[0][0]]
+        start = dists.columns[mx[0][0]]  # translate to node ID
 
         # Reroot to one of the nodes that gives the longest distance
         x.reroot(start, inplace=True)
@@ -1362,7 +1378,7 @@ def longest_neurite(
     elif isinstance(n, slice):
         tn_to_preserve = [tn for s in segments[n] for tn in s]
     else:
-        raise TypeError(f'Unable to use N of type "{type(n)}"')
+        raise TypeError(f'Unable to use `n` of type "{type(n)}"')
 
     if not inverse:
         _ = morpho.subset_neuron(x, tn_to_preserve, inplace=True)
