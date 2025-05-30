@@ -9,6 +9,7 @@ pint>=0.10
 pynrrd>=0.4.2
 pypng>=0.0.18
 requests>=2.20
+requests-futures>=1.0.2
 seaborn>=0.10
 setuptools>=65.5.1
 scipy>=1.5
@@ -38,7 +39,7 @@ flybrains  #extra: flybrains
 
 cloud-volume>=5.2.0  #extra: cloudvolume
 
-navis-fastcore>=0.0.7  #extra: fastcore
+navis-fastcore>=0.1.0  #extra: fastcore
 
 plotly>=4.9  #extra: plotly
 

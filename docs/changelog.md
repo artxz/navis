@@ -13,12 +13,26 @@ For a full list of changes please see the [commits history](https://github.com/n
 ## dev
 _Date: ongoing_
 
+##### Improvements
+- reading neurons from URLs should now generally be much faster
+- [`split_axon_dendrite`][navis.split_axon_dendrite] now allows setting the in-/output ratio for the split (see `split` parameter)
+- small speed ups for [`heal_skeleton`][navis.heal_skeleton] and [`resample_skeleton`][navis.resample_skeleton]
+- add `progress` parameter to [`mirror_brain`][navis.mirror_brain] and [`symmetrize_brain`][navis.symmetrize_brain]
+- [`persistence_vectors`][navis.persistence_vectors] now accepts list of distances to be sampled as `samples`
+
+##### Fixes
+- fix issue when plotting skeleton where the soma has no radius
+- [`read_precomputed`][navis.read_precomputed] will now also look for `.ngmesh` files when given a folder to search
+
 To install the current `dev` version of {{ navis }}:
 
 ```shell
 pip uninstall navis -y
 pip install git+https://github.com/navis-org/navis@master
 ```
+
+## Version `1.10.0` { data-toc-label="1.10.0" }
+_Date: 06/02/25_
 
 ##### Improvements
 - made reading neurons from `.tar` archives much faster
@@ -27,9 +41,14 @@ pip install git+https://github.com/navis-org/navis@master
 ##### Fixes
 - `opacity` parameter [`plot3d`](navis.plot3d) now works correctly when using the plotly backend
 - fixed an issue with Elastix transforms on Windows machines
+- fixes for [`navis.longest_neurite`][] when `from_root=False`
 - fixed issues with neuPrint interface when using multiple clients
-- fixed an issue with mesh simplification and the pymeshlab backend
+- fixed an issue with the MICrONS interface
+- fixed an issue with mesh simplification and the pymeshlab and Blender backends (@floesche)
 - fixed two (potential) issues in [navis.longest_neurite][] when `from_root=False`
+- fixed various issues related to numpy 2.0 (@floesche)
+
+**Full Changelog**: [v1.9.1...v1.10.0](https://github.com/navis-org/navis/compare/v1.9.1...v1.10.0)
 
 ## Version `1.9.1` { data-toc-label="1.9.1" }
 _Date: 24/10/24_

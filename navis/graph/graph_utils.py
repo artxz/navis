@@ -97,7 +97,10 @@ def _generate_segments(
 
     assert weight in ("weight", None), f'Unable to use weight "{weight}"'
 
-    if utils.fastcore and not return_lengths:
+    if utils.fastcore and (
+        # fastcore supports returning lengths since version 0.0.9
+        not return_lengths or utils.fastcore.__version_vector__ >= (0, 0, 9)
+    ):
         if weight == "weight":
             weight = utils.fastcore.dag.parent_dist(
                 x.nodes.node_id.values,
@@ -106,9 +109,20 @@ def _generate_segments(
                 root_dist=0,
             )
 
-        return utils.fastcore.generate_segments(
+        # Depending on fastcore version it will return either just `segs` or (`segs`, `lengths`)
+        res = utils.fastcore.generate_segments(
             x.nodes.node_id.values, x.nodes.parent_id.values, weights=weight
         )
+        if isinstance(res, tuple):
+            segs, lengths = res
+        else:
+            segs = res
+            lengths = None
+
+        if return_lengths:
+            return segs, lengths
+        else:
+            return segs
 
     # Find leaf nodes and sort by distance to root
     d = dist_to_root(x, igraph_indices=False, weight=weight)
@@ -859,7 +873,7 @@ def geodesic_matrix(
             miss = from_[~np.isin(from_, x.nodes.node_id.values)]
             if len(miss):
                 raise ValueError(
-                    f'Node/vertex IDs not present: {", ".join(miss.astype(str))}'
+                    f"Node/vertex IDs not present: {', '.join(miss.astype(str))}"
                 )
             ix = from_
         else:
@@ -2374,3 +2388,34 @@ def rewire_skeleton(
     x._clear_temp_attr()
 
     return x
+
+
+def match_mesh_skeleton(mesh, skeleton):
+    """Match vertices of MeshNeuron to nodes of TreeNeuron.
+
+    Parameters
+    ----------
+    mesh :      MeshNeuron
+                MeshNeuron to match.
+    skeleton :  TreeNeuron
+                Skeleton to match.
+
+    Returns
+    -------
+    np.ndarray
+                Array of skeleton node IDs for each vertex in the mesh.
+
+    """
+    if not isinstance(mesh, core.MeshNeuron):
+        raise TypeError(f"Expected MeshNeuron, got {type(mesh)}")
+
+    if not isinstance(skeleton, core.TreeNeuron):
+        raise TypeError(f"Expected TreeNeuron, got {type(skeleton)}")
+
+    # Generate a KDTree for the skeleton
+    tree = graph.neuron2KDTree(skeleton)
+
+    # Find closest node for each vertex
+    dist, ix = tree.query(mesh.vertices, k=1)
+
+    return skeleton.nodes.node_id.values[ix]
