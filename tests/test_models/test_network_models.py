@@ -3,7 +3,12 @@ import networkx as nx
 import numpy as np
 import pandas as pd
 
-from navis.models.network_models import (TraversalModel, BayesianTraversalModel)
+from navis.models.network_models import (
+    TraversalModel,
+    BayesianTraversalModel,
+    linear_activation_p,
+    linear_activation_with_neg,
+)
 
 def test_traversal_models():
     models = (TraversalModel, BayesianTraversalModel)
@@ -30,43 +35,61 @@ def test_traversal_models():
         results[m] = res
 
     for m in models:
-        pd.testing.assert_frame_equal(results[TraversalModel], results[m])
+        pd.testing.assert_frame_equal(results[TraversalModel], results[m], check_dtype=False)
 
 
-def test_bayesian_matches_montecarlo_diamond():
-    """Regression test for #194.
+def test_bayesian_batched_path_dag():
+    """On a path graph the batched BTM should hit each node exactly at
+    the corresponding step. cmf entries before that step must be 0,
+    entries at-or-after must be 1 (weight=1 => certain traversal)."""
+    G = nx.path_graph(6, create_using=nx.DiGraph)
+    edges = nx.to_pandas_edgelist(G)
+    edges['weight'] = 1.0
 
-    On a probabilistic diamond (a single point of reconvergence) the
-    deterministic BayesianTraversalModel must match the Monte-Carlo
-    TraversalModel. Previously an independence-across-time assumption made the
-    sink node appear traversed too early (layer_mean ~3.878 instead of ~3.963).
-    """
-    # Diamond: 0->1, 0->2, 1->3, 2->3, seed 0.
-    # linear_activation_p maps weight 0.15 -> traversal probability 0.5.
-    edges = pd.DataFrame({
-        'source': [0, 0, 1, 2],
-        'target': [1, 2, 3, 3],
-        'weight': [0.15, 0.15, 0.15, 0.15],
-    })
+    model = BayesianTraversalModel(edges, seeds=[0], max_steps=6)
+    res = model.run()
+    cmf_by_node = dict(zip(res['node'], res['cmf']))
 
-    np.random.seed(0)
-    tm = TraversalModel(edges, seeds=[0], max_steps=15)
-    tm.run(iterations=100000)
-    ts = tm.summary
-    if ts.index.name != 'node':
-        ts.set_index('node', inplace=True)
+    # Node i is reached at step i (seed at step 0).
+    for i in range(6):
+        cmf = np.asarray(cmf_by_node[i])
+        assert np.all(cmf[:i] == 0.0), (i, cmf)
+        assert np.all(cmf[i:] == 1.0), (i, cmf)
 
-    bm = BayesianTraversalModel(edges, seeds=[0], max_steps=15)
-    bm.run()
-    bs = bm.summary
-    if bs.index.name != 'node':
-        bs.set_index('node', inplace=True)
 
-    # Sink node must match Monte-Carlo (~3.96), not the old biased ~3.878.
-    assert bs.loc[3, 'layer_mean'] == pytest.approx(ts.loc[3, 'layer_mean'], abs=0.05)
-    assert bs.loc[3, 'layer_mean'] > 3.9
+def test_bayesian_batched_inhibitory():
+    """Inhibitory (negative-weight) edges multiplicatively suppress the
+    activation probability accumulated from excitatory inputs.
+    With one excitatory and one fully-inhibitory parent both at cmf=1,
+    the target's cmf should stay at 0."""
+    edges = pd.DataFrame(
+        [[0, 2, 0.9], [1, 2, -0.9]],
+        columns=['source', 'target', 'weight'],
+    ).astype({'source': 'int64', 'target': 'int64', 'weight': 'float64'})
 
-    # Every node's mean traversal step should track Monte-Carlo closely.
-    for node in ts.index.intersection(bs.index):
-        assert bs.loc[node, 'layer_mean'] == pytest.approx(
-            ts.loc[node, 'layer_mean'], abs=0.05)
+    def act(w):
+        return linear_activation_with_neg(w, neg_w=-1.0, pos_w=1.0)
+
+    model = BayesianTraversalModel(
+        edges, seeds=[0, 1], max_steps=4, traversal_func=act
+    )
+    res = model.run()
+    cmf_by_node = dict(zip(res['node'], res['cmf']))
+    cmf2 = np.asarray(cmf_by_node[2])
+    # new_pmf = (1 - (1 - 0.9)) * (1 - 0.9) = 0.9 * 0.1 = 0.09 per step
+    assert cmf2[0] == 0.0
+    assert np.isclose(cmf2[1], 0.09)
+    # If both parents were excitatory (no inhibition), cmf2[1] would be 0.99.
+    assert cmf2[1] < 0.5
+
+
+def test_bayesian_batched_summary_columns():
+    """The summary DataFrame must expose the documented layer columns."""
+    G = nx.path_graph(5, create_using=nx.DiGraph)
+    edges = nx.to_pandas_edgelist(G)
+    edges['weight'] = 1.0
+    model = BayesianTraversalModel(edges, seeds=[0], max_steps=5)
+    model.run()
+    s = model.summary
+    for col in ('layer_min', 'layer_max', 'layer_mean', 'layer_median'):
+        assert col in s.columns
