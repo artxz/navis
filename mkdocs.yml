@@ -15,6 +15,7 @@ nav:
   - Quickstart: quickstart.md
   - Tutorials: generated/gallery
   - ecosystem.md
+  - Publications: publications.md
   - Changelog: changelog.md
   - API Documentation:
     - api.md
@@ -86,7 +87,14 @@ markdown_extensions:
 plugins:
   # the privacy plugin will bundle external assets (like Google Fonts)
   # this should make the website GDPR compliant
-  - privacy
+  - privacy:
+      assets_exclude:
+        # We're avoiding bundling the plotly.js library because we ran into
+        # an issue where the sha of the bundled version did not match the one expected from the
+        # generated `integrity` tag, which caused the library to fail to load.
+        - cdn.plot.ly/*
+        # There seems to also be an issue with the Zenodo batch for some reason
+        - zenodo.org/*
   # the social plugin generates social cards for each page of the project
   # which are used as previews when sharing links to the documentation
   - social
