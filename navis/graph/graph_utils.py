@@ -101,7 +101,8 @@ def _generate_segments(
 
     if utils.fastcore and (
         # fastcore supports returning lengths since version 0.0.9
-        not return_lengths or utils.fastcore.__version_vector__ >= (0, 0, 9)
+        not return_lengths
+        or utils.fastcore.__version_vector__ >= (0, 0, 9)
     ):
         if weight == "weight":
             weight = utils.fastcore.dag.parent_dist(
@@ -215,8 +216,21 @@ def _connected_components(
         ms = utils.fastcore.connected_components(
             x.nodes.node_id.values, x.nodes.parent_id.values
         )
-        # Translate into list of sets
-        cc = [x.nodes.node_id.values[ms == i] for i in np.unique(ms)]
+        # Translate into list of arrays of IDs
+        # cc = [x.nodes.node_id.values[ms == i] for i in np.unique(ms)]
+        # Translate into list of arrays of IDs
+        order = np.argsort(ms, kind="mergesort")
+        ms_sorted = ms[order]
+        _, start_idx, counts = np.unique(ms_sorted, return_index=True, return_counts=True)
+        cc = [x.nodes.node_id.values[order[start:start + count]] for start, count in zip(start_idx, counts)]
+    elif isinstance(x, core.MeshNeuron) and utils.fastcore and hasattr(utils.fastcore, "mesh_connected_components"):
+        # This returns for each vertex the ID of its component
+        ms = utils.fastcore.mesh_connected_components(x.faces, len(x.vertices))  # type: ignore
+        # Translate into list of arrays of IDs
+        order = np.argsort(ms, kind="mergesort")
+        ms_sorted = ms[order]
+        _, start_idx, counts = np.unique(ms_sorted, return_index=True, return_counts=True)
+        cc = [order[start:start + count] for start, count in zip(start_idx, counts)]
     elif config.use_igraph and x.igraph:
         G: igraph.Graph = x.igraph  # noqa
         # Get the vertex clustering
@@ -1466,7 +1480,7 @@ def reroot_skeleton(
 
             if root not in x.tags:
                 raise ValueError(
-                    f"#{x.id}: Found no nodes with tag {root}" " - please double check!"
+                    f"#{x.id}: Found no nodes with tag {root} - please double check!"
                 )
 
             elif len(x.tags[root]) > 1:
@@ -1507,13 +1521,20 @@ def reroot_skeleton(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
 
+                # Find vertices corresponding to current root(s)
+                vs_roots = g.vs.select(node_id_in=x.root)
+
+                # Sort to match x.root
+                vs_roots = {v['node_id']: v for v in vs_roots}
+                vs_roots = [vs_roots[r] for r in x.root]
+
                 # Find paths to all roots
                 path = g.get_shortest_paths(
-                    g.vs.find(node_id=new_root), [g.vs.find(node_id=r) for r in x.root]
+                    g.vs.find(node_id=new_root), vs_roots
                 )
                 epath = g.get_shortest_paths(
                     g.vs.find(node_id=new_root),
-                    [g.vs.find(node_id=r) for r in x.root],
+                    vs_roots,
                     output="epath",
                 )
 
@@ -1609,7 +1630,7 @@ def reroot_skeleton(
 
     # Make sure node ID has the same datatype as before
     if x.nodes.node_id.dtype != nodeid_dtype:
-        x.nodes["node_id"] = x.nodes.node_id.astype(nodeid_dtype, copy=False)
+        x.nodes["node_id"] = x.nodes.node_id.astype(nodeid_dtype)
 
     # Finally: only reset non-graph related attributes
     if x.igraph and config.use_igraph:
@@ -2431,7 +2452,7 @@ def propagate_labels(
     weights=None,
     directed=False,
     max_iter=10000,
-    tol=1e-6,
+    tol=1,
     return_probs: Union[bool, Literal["softmax", "raw"]] = False,
     verbose=False,
 ):
@@ -2468,8 +2489,12 @@ def propagate_labels(
                 directions.
     max_iter :  int
                 Maximum number of iterations for label propagation.
-    tol :       float
-                Tolerance for convergence.
+    tol :       int | float
+                Tolerance for convergence. If >=1 (default), we stop when not a single node's
+                hard assignment has changed in `tol` iterations. That does not mean that the
+                probabilities have fully converged but it's a sign that things are slowing down.
+                If < 1, we stop when the maximum change in probabilities across all nodes is
+                less than `tol`.
     return_probs : bool | "softmax" | "raw"
                 Whether to also return the propagated probabilities. If not `False`,
                 will return a tuple of `(prop, probs, labels)` (see Returns).
@@ -2511,7 +2536,7 @@ def propagate_labels(
     >>> # neighborhood suggests a different label.
     >>> prop_labels = navis.graph.graph_utils.propagate_labels(n, labels, clamping=False)
     >>> prop_labels[:5]
-    ['post', 'post', 'post', 'post', 'post']
+    array(['post', 'post', 'post', 'post', 'post'], dtype=object)
 
     >>> # To visualize
     >>> # navis.plot3d(n, color_by=prop_labels, palette={"pre": "red", "post": "blue"})
@@ -2527,7 +2552,7 @@ def propagate_labels(
         "raw",
     ), f"Invalid value for return_probs: {return_probs}"
     assert max_iter > 0, "max_iter must be a positive integer"
-    assert tol > 0, "tol must be a positive float"
+    assert isinstance(tol, (int, float)) and tol > 0, "tol must be a positive float"
 
     if isinstance(labels, str):
         if isinstance(x, core.TreeNeuron):
@@ -2663,7 +2688,14 @@ def propagate_labels(
                 )
             clamping = "soft"
 
-    for _ in range(max_iter):
+    if tol >= 1:
+        prev_hard = np.argmax(F, axis=1)
+        n_hard = 0
+
+    F_max = F.max() + 1e-16  # to normalize change for convergence check
+
+    for it in range(max_iter):
+        # Propagate labels
         F_new = S @ F
 
         # Clamp labeled nodes
@@ -2674,23 +2706,35 @@ def propagate_labels(
         elif clamping:
             F_new[labeled_mask] = Y[labeled_mask]
 
-        change = np.linalg.norm(F_new - F)
-        if change < tol:
+        if tol >= 1:
+            hard = np.argmax(F_new, axis=1)
+            if np.array_equal(hard, prev_hard):
+                n_hard += 1
+            if n_hard > tol:
+                change = np.abs(F_new - F).max() / F_max
+                F = F_new
+                break  # no change in hard labels between iterations
+            prev_hard = hard
+        elif change := (np.abs(F_new - F).max() / F_max) < tol:
+            F = F_new
             break
+
+        # Make sure we have a change value to report if we hit max_iter without convergence
+        if it == max_iter - 1:
+            change = np.abs(F_new - F).max() / F_max
 
         F = F_new
 
     if verbose:
-        if _ == max_iter - 1:
-            if change == 0:
-                change_str = "0"
-            else:
-                change_str = f"{change:.0e}"
+        change_str = "0" if change == 0 else f"{change:.2e}"
+        if it == max_iter - 1:
             print(
-                f"Finished {max_iter:,} iterations without convergence (last change: {change_str})."
+                f"Finished {max_iter:,} iterations without convergence (last largest change: {change_str})."
             )
         else:
-            print(f"Converged after {_:,} iterations.")
+            print(
+                f"Converged after {it:,} iterations (last largest change: {change_str})."
+            )
 
     # Convert to predicted labels
     prop = {}
